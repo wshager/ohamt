@@ -1,0 +1,11 @@
+{
+  "name": "ohamt",
+  "version": "0.0.1",
+  "description": "Ordered Hash array mapped trie",
+  "main": "./src/ohamt.js",
+  "scripts": {
+    "test": "node tests/index.js"
+  },
+  "author": "W.S. Hager",
+  "license": "MIT"
+}
