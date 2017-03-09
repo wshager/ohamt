@@ -507,7 +507,8 @@ const Multi__modify = function(edit, keyEq, shift, f, h, k, size, insert) {
             let v = f();
             if(v===repeated.value) throw new Error("Either key or value must be unique in a multimap");
             ++size.value;
-            return Multi(edit, h, k, arrayUpdate(canEdit,idx,Bucket(edit, h, k, [{key:k, value:repeated.value}, {key:k, value: v}], repeated.prev, repeated.next),list));
+            let val = repeated.type == BUCKET ? arrayUpdate(canEdit,repeated.value.length,{key:k, value: v}, repeated.value) : [{key:k, value:repeated.value}, {key:k, value: v}];
+            return Multi(edit, h, k, arrayUpdate(canEdit,idx,Bucket(edit, h, k, val, repeated.prev, repeated.next),list));
         }
         // if Multi exists, find leaf
         list = updateMultiList(canEdit, edit, h, list, f, k, size, insert);
@@ -526,6 +527,7 @@ const Multi__modify = function(edit, keyEq, shift, f, h, k, size, insert) {
 const Bucket__modify = function(edit, keyEq, shift, f, h, k, size, insert) {
     if (keyEq(k,this.key)) {
         var list = this.value;
+
         list = updateMultiList(canEditNode(edit, this), edit, h, list, f, k, size, insert);
         if (list === this.value) return this;
 
@@ -593,11 +595,18 @@ function getLeafFromMultiR(node,next){
         if((c.next && c.next[1]) == nextKey) return c;
     }
 }
-
-function getLeafFromMultiV(node,val){
+/*
+function getNextFromBucketV(node,val){
     for(var i = 0, len = node.children.length; i < len; i++){
         var c = node.children[i];
         if(c.value === val) return c;
+    }
+}
+*/
+function getLeafFromMultiV(node,val){
+    for(var i = 0, len = node.children.length; i < len; i++){
+        var c = node.children[i];
+        if(c.type == BUCKET || c.value === val) return c;
     }
 }
 
@@ -635,6 +644,7 @@ function updatePosition(parent,edit,entry,val,prev = false,s = 0){
             node = children[idx];
             if(node.next === undefined) break;
         }
+
     }
     if(node){
         children = arrayUpdate(canEditNode(edit, node), idx, updatePosition(node,edit,entry,val,prev,s), children);
@@ -793,23 +803,28 @@ Map.prototype.get = function(key, alt) {
 
 Map.prototype.first = function(){
     var start = this._start;
-	var node = this.getHash(start[0], start[1]);
-	if(node.constructor === Array) return node[0].value;
-	return node;
+    var node = getLeafOrMulti(this._root, start[0], start[1]);
+    if(node.type == MULTI) node = getLeafFromMultiN(node,0);
+    if(node.type == BUCKET) node = node.value[0];
+    return node.value;
 };
 
 Map.prototype.last = function(){
     var end = this._init;
-	var node = this.getHash(end[0], end[1]);
-	if(node.constructor === Array) return last(node).value;
-	return node;
+    var node = getLeafOrMulti(this._root, end[0], end[1]);
+    if(node.type == MULTI) node = getLeafFromMultiN(node,node.children.length-1);
+    if(node.type == BUCKET) node = last(node.value);
+    return node.value;
 };
 
 Map.prototype.next = function (key, val) {
     var node = getLeafOrMulti(this._root, hash(key), key);
-    if(node.type == MULTI) node = getLeafFromMultiV(node,val);
+    //console.log(key,"MUL",node)
+    if(node.type == MULTI) {
+        node = getLeafFromMultiV(node,val);
+    }
     if(node.type == BUCKET) {
-        for(var i=0, l = node.value.length; i<l; i++) {
+        for(let i=0, l = node.value.length; i<l; i++) {
             if(node.value[i].value === val) {
                 if(i+1<l) return node.value[i+1].value;
             }
@@ -817,8 +832,18 @@ Map.prototype.next = function (key, val) {
     }
     if(node.next === undefined) return;
     var next = getLeafOrMulti(this._root, node.next[0], node.next[1]);
-    if(next.type == MULTI) return next.children[0].value;
-    if(next.type == BUCKET) return next.value[0].value;
+    if(next.type == MULTI) {
+        for(let i = 0, l = next.children.length;i<l;i++){
+            let c = next.children[i];
+            if(c.prev && c.prev[1] === key) {
+                next = c;
+                break;
+            }
+        }
+    }
+    if(next.type == BUCKET) {
+        next = next.value[0];
+    }
     return next.value;
 };
 
@@ -1117,6 +1142,7 @@ Map.prototype.mutate = function(f) {
              return { value: this.f(rest[0]) };
          }
      }
+     this.prevNode = node;
      this.v = node.next;
      return { value: this.f(node) };
  };
