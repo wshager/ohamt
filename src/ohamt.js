@@ -147,7 +147,6 @@ const COLLISION = 2;
 const INDEX = 3;
 const ARRAY = 4;
 const MULTI = 5;
-const BUCKET = 6;
 
 /**
     Empty node.
@@ -167,7 +166,7 @@ const isEmptyNode = x =>
     @member key Key.
     @member value Value stored.
 */
-const Leaf = (edit, hash, key, value, prev, next) => ({
+const Leaf = (edit, hash, key, value, prev, id, next) => ({
     type: LEAF,
     edit: edit,
     hash: hash,
@@ -175,6 +174,7 @@ const Leaf = (edit, hash, key, value, prev, next) => ({
     value: value,
     prev: prev,
     next: next,
+    id:id,
     _modify: Leaf__modify
 });
 
@@ -235,16 +235,6 @@ const Multi = (edit, hash, key, children) => ({
     _modify: Multi__modify
 });
 
-const Bucket = (edit, hash, key, value, prev, next) => ({
-    type: BUCKET,
-    edit: edit,
-    hash: hash,
-    key: key,
-    value: value,
-    prev: prev,
-    next: next,
-    _modify: Bucket__modify
-});
 
 /**
     Is `node` a leaf node?
@@ -365,7 +355,7 @@ const updateMultiList = (mutate, edit, h, list, f, k, size, insert) => {
         return arraySpliceOut(mutate, len - 1, list);
     }
     ++size.value;
-    return arrayUpdate(mutate, len, Leaf(edit, h, k, newValue, insert), list);
+    return arrayUpdate(mutate, len, Leaf(edit, h, k, newValue, insert, list[len - 1].id + 1), list);
 };
 
 const canEditNode = (edit, node) => edit === node.edit;
@@ -389,7 +379,7 @@ const Leaf__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi) 
                 this.prev = insert || this.prev;
                 return this;
             }
-            return Leaf(edit, h, k, v, insert || this.prev, this.next);
+            return Leaf(edit, h, k, v, insert || this.prev, 0, this.next);
         }
     }
     let v = f();
@@ -397,10 +387,9 @@ const Leaf__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi) 
     ++size.value;
     if(multi && leaf) {
         if(v===leaf.value) throw new Error("Either key or value must be unique in a multimap");
-        if(insert && insert[1] === k) return Bucket(edit, h, k, [{key:k, value:leaf.value}, {key:k, value: v}], leaf.prev, leaf.next);
-        return Multi(edit, h, k, [leaf, Leaf(edit, h, k, v, insert)]);
+        return Multi(edit, h, k, [leaf, Leaf(edit, h, k, v, insert, multi)]);
     }
-    return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert));
+    return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert, 0));
 };
 
 const Collision__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi) {
@@ -417,7 +406,7 @@ const Collision__modify = function(edit, keyEq, shift, f, h, k, size, insert, mu
     if (v === nothing)
         return this;
     ++size.value;
-    return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert));
+    return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert,0));
 };
 
 const IndexedNode__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi) {
@@ -498,18 +487,8 @@ const ArrayNode__modify = function(edit, keyEq, shift, f, h, k, size, insert, mu
 const Multi__modify = function(edit, keyEq, shift, f, h, k, size, insert) {
     if (keyEq(k,this.key)) {
         // modify
-        // if repeat, add value to repeated Bucket
         const canEdit = canEditNode(edit, this);
         var list = this.children;
-        if(insert && insert[1] === k) {
-            var idx = list.length - 1;
-            var repeated = list[idx];
-            let v = f();
-            if(v===repeated.value) throw new Error("Either key or value must be unique in a multimap");
-            ++size.value;
-            let val = repeated.type == BUCKET ? arrayUpdate(canEdit,repeated.value.length,{key:k, value: v}, repeated.value) : [{key:k, value:repeated.value}, {key:k, value: v}];
-            return Multi(edit, h, k, arrayUpdate(canEdit,idx,Bucket(edit, h, k, val, repeated.prev, repeated.next),list));
-        }
         // if Multi exists, find leaf
         list = updateMultiList(canEdit, edit, h, list, f, k, size, insert);
         if (list === this.children) return this;
@@ -521,24 +500,7 @@ const Multi__modify = function(edit, keyEq, shift, f, h, k, size, insert) {
     let v = f();
     if (v === nothing) return this;
     ++size.value;
-    return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert));
-};
-
-const Bucket__modify = function(edit, keyEq, shift, f, h, k, size, insert) {
-    if (keyEq(k,this.key)) {
-        var list = this.value;
-
-        list = updateMultiList(canEditNode(edit, this), edit, h, list, f, k, size, insert);
-        if (list === this.value) return this;
-
-        if(list.length > 1) return Bucket(edit, h, k, list, this.prev,this.next);
-        // collapse single element collision list
-        return list[0];
-    }
-    let v = f();
-    if (v === nothing) return this;
-    ++size.value;
-    return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert));
+    return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert, 0));
 };
 
 empty._modify = (edit, keyEq, shift, f, h, k, size, insert) => {
@@ -546,7 +508,7 @@ empty._modify = (edit, keyEq, shift, f, h, k, size, insert) => {
     if (v === nothing)
         return empty;
     ++size.value;
-    return Leaf(edit, h, k, v, insert);
+    return Leaf(edit, h, k, v, insert, 0);
 };
 
 /* Ordered / Multi helpers
@@ -567,57 +529,46 @@ function getLeafOrMulti(node,hash,key){
         } else if(node.type == 3) {
             var frag = hashFragment(s, hash);
             var bit = toBitmap(frag);
-            if (node.mask & bit) node = node.children[fromBitmap(node.mask, bit)];
+            if (node.mask & bit) {
+                node = node.children[fromBitmap(node.mask, bit)];
+            } else {
+                return;
+            }
             s += SIZE;
         } else if(node.type == 4) {
             node = node.children[hashFragment(s, hash)];
             s += SIZE;
         } else {
             // just return
-            return node;
+            if(node.key === key) {
+                return node;
+            } else {
+                return;
+            }
         }
     }
-    return node;
+    if(node.key === key) return node;
 }
 
-function getLeafFromMulti(node,prev){
-    var prevKey = prev && prev[1];
+function getLeafFromMulti(node,id){
     for(var i = 0, len = node.children.length; i < len; i++){
         var c = node.children[i];
-        if((c.prev && c.prev[1]) == prevKey) return c;
+        if(c.id === id) return c;
     }
 }
 
-function getLeafFromMultiR(node,next){
-    var nextKey = next && next[1];
-    for(var i = 0, len = node.children.length; i < len; i++){
-        var c = node.children[i];
-        if((c.next && c.next[1]) == nextKey) return c;
-    }
-}
-/*
-function getNextFromBucketV(node,val){
+function getLeafFromMultiV(node,val){
     for(var i = 0, len = node.children.length; i < len; i++){
         var c = node.children[i];
         if(c.value === val) return c;
     }
 }
-*/
-function getLeafFromMultiV(node,val){
-    for(var i = 0, len = node.children.length; i < len; i++){
-        var c = node.children[i];
-        if(c.type == BUCKET || c.value === val) return c;
-    }
-}
-
-function getLeafFromMultiN(node,n){
-    return node.children[n];
-}
 
 function updatePosition(parent,edit,entry,val,prev = false,s = 0){
-    var len = 0, type = parent.type, node = null, idx = 0, hash = entry[0], key = entry[1];
-    if(type == 1) return Leaf(edit, parent.hash, parent.key, parent.value, prev ? val : parent.prev, prev ? parent.next : val);
-    if(type == 6) return Bucket(edit, parent.hash, parent.key, parent.value, prev ? val : parent.prev, prev ? parent.next : val);
+    var len = 0, type = parent.type, node = null, idx = 0, hash = entry[0], key = entry[1], id = entry[2];
+    if(type == 1) {
+        return Leaf(edit, parent.hash, parent.key, parent.value, prev ? val : parent.prev, parent.id, prev ? parent.next : val);
+    }
     var children = parent.children;
     if(type == 2) {
         len = children.length;
@@ -642,7 +593,7 @@ function updatePosition(parent,edit,entry,val,prev = false,s = 0){
         len = children.length;
         for(;idx<len;idx++) {
             node = children[idx];
-            if(node.next === undefined) break;
+            if(node.id === id) break;
         }
 
     }
@@ -744,17 +695,9 @@ const tryGetHash = hamt.tryGetHash = (alt, hash, key, map) => {
             var ret = [];
             for(let i=0, len=node.children.length;i<len; i++){
                 var c = node.children[i];
-                if(c.type == BUCKET) {
-                    ret.push.apply(ret,c.value);
-                } else {
-                    ret.push(c.value);
-                }
+                ret.push(c.value);
             }
             return ret;
-        }
-        case BUCKET:
-        {
-            return keyEq(key, node.key) ? node.value : alt;
         }
         default:
             return alt;
@@ -804,45 +747,26 @@ Map.prototype.get = function(key, alt) {
 Map.prototype.first = function(){
     var start = this._start;
     var node = getLeafOrMulti(this._root, start[0], start[1]);
-    if(node.type == MULTI) node = getLeafFromMultiN(node,0);
-    if(node.type == BUCKET) node = node.value[0];
+    if(node.type == MULTI) node = getLeafFromMulti(node,start[2]);
     return node.value;
 };
 
 Map.prototype.last = function(){
     var end = this._init;
     var node = getLeafOrMulti(this._root, end[0], end[1]);
-    if(node.type == MULTI) node = getLeafFromMultiN(node,node.children.length-1);
-    if(node.type == BUCKET) node = last(node.value);
+    if(node.type == MULTI) node = getLeafFromMulti(node,end[2]);
     return node.value;
 };
 
 Map.prototype.next = function (key, val) {
     var node = getLeafOrMulti(this._root, hash(key), key);
-    //console.log(key,"MUL",node)
     if(node.type == MULTI) {
         node = getLeafFromMultiV(node,val);
-    }
-    if(node.type == BUCKET) {
-        for(let i=0, l = node.value.length; i<l; i++) {
-            if(node.value[i].value === val) {
-                if(i+1<l) return node.value[i+1].value;
-            }
-        }
     }
     if(node.next === undefined) return;
     var next = getLeafOrMulti(this._root, node.next[0], node.next[1]);
     if(next.type == MULTI) {
-        for(let i = 0, l = next.children.length;i<l;i++){
-            let c = next.children[i];
-            if(c.prev && c.prev[1] === key) {
-                next = c;
-                break;
-            }
-        }
-    }
-    if(next.type == BUCKET) {
-        next = next.value[0];
+        next = getLeafFromMulti(next,node.next[2]);
     }
     return next.value;
 };
@@ -919,7 +843,7 @@ const modifyHash = hamt.modifyHash = (f, hash, key, insert, multi, map) => {
         size,
         insert,
         multi);
-    return map.setTree(newRoot, size.value, insert || !map._size ? [hash,key] : map._insert);
+    return map.setTree(newRoot, size.value, insert || !map._size ? [hash,key,multi] : map._insert);
 };
 
 Map.prototype.modifyHash = function(hash, key, f) {
@@ -953,7 +877,7 @@ Map.prototype.setHash = function(hash, key, value) {
 
 const appendHash = hamt.appendHash = function(hash, key, value, exists, map){
     var insert = map._insert;
-    map = modifyHash(constant(value), hash, key, exists ? null : insert, false, map);
+    map = modifyHash(constant(value), hash, key, exists ? null : insert, 0, map);
     if(insert && !exists) {
         const edit = map._editable ? map._edit : NaN;
         map._root = updatePosition(map._root,edit,insert,[hash,key]);
@@ -991,13 +915,13 @@ Map.prototype.set = function(key, value) {
  */
 const addHash = hamt.addHash = function(hash, key, value, map){
     var insert = map._insert;
-    var newmap = modifyHash(constant(value), hash, key, insert, true, map);
-    if(insert && insert[1] !== key) {
+    var node = getLeafOrMulti(map._root,hash,key);
+    var multi = node ? node.type == MULTI ? last(node.children).id+1 : node.type == LEAF ? node.id+1 : 0 : 0;
+    var newmap = modifyHash(constant(value), hash, key, insert, multi, map);
+    if(insert) {
         const edit = map._editable ? map._edit : NaN;
-        newmap._root = updatePosition(newmap._root,edit,insert,[hash,key]);
+        newmap._root = updatePosition(newmap._root,edit,insert,[hash,key,multi]);
     }
-    // mark multi-mode
-    //map._multi = true;
     return newmap;
 };
 
@@ -1113,36 +1037,17 @@ Map.prototype.mutate = function(f) {
      this.root = root;
      this.f = f;
      this.v = v;
-     this.i = 0;
-     this.size = 0;
-     this.rest = null;
  }
 
  MapIterator.prototype.next = function () {
-     if(this.i < this.size) {
-         return { value: this.f(this.rest[this.i++]) };
-     }
-     var v = this.v, prev = this.prev;
+     var v = this.v;
      if (!v) return DONE;
      this.prev = v;
      var node = getLeafOrMulti(this.root,v[0], v[1]);
-     if(node.type > 4) {
-         if(node.type == MULTI) {
-             node = getLeafFromMulti(node,prev);
-             if(!node) return DONE;
-             //this.v = node.next;
-             //return { value: this.f(node) };
-         }
-         if(node.type == BUCKET){
-             var rest = node.value;
-             this.i = 1;
-             this.size = rest.length;
-             this.rest = rest;
-             this.v = node.next;
-             return { value: this.f(rest[0]) };
-         }
+     if(node.type == MULTI) {
+         node = getLeafFromMulti(node,v[2]);
+         if(!node) return DONE;
      }
-     this.prevNode = node;
      this.v = node.next;
      return { value: this.f(node) };
  };
