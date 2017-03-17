@@ -96,20 +96,21 @@ const arrayUpdate = (mutate, at, v, arr) => {
     @param arr Array.
 */
 const arraySpliceOut = (mutate, at, arr) => {
-    const len = arr.length;
+    const len = arr.length - 1;
     let i = 0,
         g = 0;
     let out = arr;
     if (mutate) {
-        i = g = at;
+		g = i = at;
     } else {
-        out = new Array(len - 1);
+        out = new Array(len);
         while (i < at)
             out[g++] = arr[i++];
-        ++i;
     }
-    while (i < len)
+    ++i;
+    while (i <= len)
         out[g++] = arr[i++];
+    out.length = len;
     return out;
 };
 
@@ -347,12 +348,14 @@ const updateCollisionList = (mutate, edit, keyEq, h, list, f, k, size, insert, m
     return arrayUpdate(mutate, len, Leaf(edit, h, k, newValue, insert), list);
 };
 
-const updateMultiList = (mutate, edit, h, list, f, k, size, insert) => {
+const updateMultiList = (mutate, edit, h, list, f, k, size, insert, multi) => {
     var len = list.length;
     var newValue = f();
     if (newValue === nothing) {
         --size.value;
-        return arraySpliceOut(mutate, len - 1, list);
+        var idx = len - 1;
+        for(;idx>=0;idx--) if(list[idx].id===multi) break;
+        return arraySpliceOut(mutate, idx, list);
     }
     ++size.value;
     return arrayUpdate(mutate, len, Leaf(edit, h, k, newValue, insert, list[len - 1].id + 1), list);
@@ -386,7 +389,7 @@ const Leaf__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi) 
     if (v === nothing) return this;
     ++size.value;
     if(multi && leaf) {
-        if(v===leaf.value) throw new Error("Either key or value must be unique in a multimap");
+        //if(v===leaf.value) throw new Error("Either key or value must be unique in a multimap");
         return Multi(edit, h, k, [leaf, Leaf(edit, h, k, v, insert, multi)]);
     }
     return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert, 0));
@@ -484,13 +487,13 @@ const ArrayNode__modify = function(edit, keyEq, shift, f, h, k, size, insert, mu
 };
 
 
-const Multi__modify = function(edit, keyEq, shift, f, h, k, size, insert) {
+const Multi__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi) {
     if (keyEq(k,this.key)) {
         // modify
         const canEdit = canEditNode(edit, this);
         var list = this.children;
         // if Multi exists, find leaf
-        list = updateMultiList(canEdit, edit, h, list, f, k, size, insert);
+        list = updateMultiList(canEdit, edit, h, list, f, k, size, insert, multi);
         if (list === this.children) return this;
 
         if(list.length > 1) return Multi(edit, h, k, list);
@@ -591,9 +594,10 @@ function updatePosition(parent,edit,entry,val,prev = false,s = 0){
     } else if(type == 5){
         // assume not in use
         len = children.length;
-        for(;idx<len;idx++) {
+        for(;idx<len;) {
             node = children[idx];
             if(node.id === id) break;
+            idx++;
         }
 
     }
@@ -925,8 +929,9 @@ const addHash = hamt.addHash = function(hash, key, value, map){
     return newmap;
 };
 
-
-Map.prototype.add = Map.prototype.push = function (key, value) {
+// single push, like arrays
+Map.prototype.push = function (kv) {
+    var key = kv[0], value = kv[1];
     return addHash(hash(key), key, value, this);
 };
 
@@ -937,30 +942,36 @@ Map.prototype.add = Map.prototype.push = function (key, value) {
     Returns a map with the value removed. Does not alter `map`.
 */
 const del = constant(nothing);
-const removeHash = hamt.removeHash = (hash, key, map) => {
+const removeHash = hamt.removeHash = (hash, key, val, map) => {
     // in case of collision, we need a leaf
     var node = getLeafOrMulti(map._root, hash, key);
     if(node === undefined) return map;
     var prev = node.prev, next = node.next;
     var insert = map._insert;
+    var leaf;
     if(node.type == MULTI){
-        // last will be removed
-        var leaf = last(node.children);
+        // default: last will be removed
+        leaf = val !== undefined ? getLeafFromMultiV(node,val) : last(node.children);
         prev = leaf.prev;
         next = leaf.next;
     }
-    map = modifyHash(del, hash, key, null, false, map);
+    map = modifyHash(del, hash, key, null, leaf ? leaf.id : undefined, map);
     const edit = map._editable ? map._edit : NaN;
+    var id = leaf ? leaf.id : 0;
     if(prev !== undefined) {
         map._root = updatePosition(map._root,edit,prev,next);
-        if(next !== undefined) map._root = updatePosition(map._root,edit,next,prev,true);
-        if(insert && insert[1] === key) map._insert = prev;
+        if(insert && insert[1] === key && insert[2] === id) map._insert = prev;
     }
-    if(map._start[1] === key && next !== undefined) {
-        //next = node.next;
-        map._root = updatePosition(map._root,edit,[hash,key],undefined);
-        map._root = updatePosition(map._root,edit,next,undefined,true);
-        map._start = next;
+    if(next !== undefined) {
+        map._root = updatePosition(map._root,edit,next,prev,true);
+        if(map._start[1] === key && map._start[2] === id) {
+            //next = node.next;
+            map._root = updatePosition(map._root,edit,next,undefined,true);
+            map._start = next;
+        }
+    }
+    if(next === undefined && prev === undefined){
+        map._insert = map._start = undefined;
     }
     return map;
 };
@@ -975,12 +986,19 @@ Map.prototype.removeHash = Map.prototype.deleteHash = function(hash, key) {
     @see `removeHash`
 */
 const remove = hamt.remove = (key, map) =>
-    removeHash(map._config.hash(key), key, map);
+    removeHash(map._config.hash(key), key, undefined, map);
 
 Map.prototype.remove = Map.prototype.delete = function(key) {
     return remove(key, this);
 };
 
+// MULTI:
+const removeValue = hamt.removeValue = (key, val, map) =>
+    removeHash(map._config.hash(key), key, val, map);
+
+Map.prototype.removeValue = Map.prototype.deleteValue = function(key,val) {
+    return removeValue(key, val, this);
+};
 /* Mutation
  ******************************************************************************/
  /**
@@ -1042,7 +1060,6 @@ Map.prototype.mutate = function(f) {
  MapIterator.prototype.next = function () {
      var v = this.v;
      if (!v) return DONE;
-     this.prev = v;
      var node = getLeafOrMulti(this.root,v[0], v[1]);
      if(node.type == MULTI) {
          node = getLeafFromMulti(node,v[2]);
