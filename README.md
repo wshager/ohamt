@@ -34,11 +34,10 @@ Returns a new map with the value set. If the key already existed, the entry will
 
 ----
 
-#### `map.add(key, value)`
-* `value` - Value to store. Hamt supports all value types, including: literals, objects, falsy values, null, and undefined. Keep in mind that only the map data structure itself is guaranteed to be immutable. Using immutable values is recommended but not required.
-* `key` - String key.
+#### `map.push(kv)`
+* `kv` - Array of String key and Any value to store.
 * `map` - Hamt map.
 
-Returns a new map with the value added to the end. If the key already existed, the original entry will not be removed. The new entry will be added to the 'end' of the map. Does not alter the original.
+Returns a new map with the value added. If the key already existed, the original entry will not be removed. The new entry will be added to the 'end' of the map. Does not alter the original. The method uses an array to mimic array push.
 
 ----
