@@ -1,11 +1,18 @@
 {
   "name": "ohamt",
-  "version": "0.0.4",
+  "version": "0.0.6",
   "description": "Ordered Hash array mapped trie",
-  "main": "./src/ohamt.js",
+  "main": "./lib/ohamt.js",
   "scripts": {
+    "build": "babel ./src --out-dir ./lib && browserify ./lib/ohamt.js -s amd > ./dist/ohamt.js",
     "test": "node tests/index.js"
   },
   "author": "W.S. Hager",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "babel-cli": "^6.18.0",
+    "babel-plugin-transform-es2015-modules-commonjs": "^6.18.0",
+    "browserify": "^14.1.0",
+    "uglify": "^0.1.5"
+  }
 }
