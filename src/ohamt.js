@@ -3,7 +3,6 @@
 
     Code based on: https://github.com/exclipy/pdata
 */
-const hamt = {}; // export
 
 /* Configuration
  ******************************************************************************/
@@ -29,7 +28,7 @@ const constant = x => () => x;
     Based on:
     http://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript-jquery
 */
-const hash = hamt.hash = str => {
+export const hash = str => {
     const type = typeof str;
     if (type === 'number')
         return str;
@@ -152,12 +151,12 @@ const MULTI = 5;
 /**
     Empty node.
 */
-const empty = ({
+const emptyNode = ({
     __hamt_isEmpty: true
 });
 
 const isEmptyNode = x =>
-    x === empty || (x && x.__hamt_isEmpty);
+    x === emptyNode || (x && x.__hamt_isEmpty);
 
 /**
     Leaf holding a value.
@@ -241,7 +240,7 @@ const Multi = (edit, hash, key, children) => ({
     Is `node` a leaf node?
 */
 const isLeaf = node =>
-    (node === empty || node.type === LEAF || node.type === COLLISION);
+    (node === emptyNode || node.type === LEAF || node.type === COLLISION);
 
 /* Internal node operations.
  ******************************************************************************/
@@ -371,7 +370,7 @@ const Leaf__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi) 
         let v = f(this.value);
         if (v === nothing) {
             --size.value;
-            return empty;
+            return emptyNode;
         }
         if(multi){
             leaf = this;
@@ -419,7 +418,7 @@ const IndexedNode__modify = function(edit, keyEq, shift, f, h, k, size, insert, 
     const bit = toBitmap(frag);
     const indx = fromBitmap(mask, bit);
     const exists = mask & bit;
-    const current = exists ? children[indx] : empty;
+    const current = exists ? children[indx] : emptyNode;
     const child = current._modify(edit, keyEq, shift + SIZE, f, h, k, size, insert, multi);
 
     if (current === child)
@@ -431,7 +430,7 @@ const IndexedNode__modify = function(edit, keyEq, shift, f, h, k, size, insert, 
     if (exists && isEmptyNode(child)) { // remove
         bitmap &= ~bit;
         if (!bitmap)
-            return empty;
+            return emptyNode;
         if (children.length <= 2 && isLeaf(children[indx ^ 1]))
             return children[indx ^ 1]; // collapse
 
@@ -459,7 +458,7 @@ const ArrayNode__modify = function(edit, keyEq, shift, f, h, k, size, insert, mu
     const children = this.children;
     const frag = hashFragment(shift, h);
     const child = children[frag];
-    const newChild = (child || empty)._modify(edit, keyEq, shift + SIZE, f, h, k, size);
+    const newChild = (child || emptyNode)._modify(edit, keyEq, shift + SIZE, f, h, k, size);
 
     if (child === newChild)
         return this;
@@ -473,7 +472,7 @@ const ArrayNode__modify = function(edit, keyEq, shift, f, h, k, size, insert, mu
         --count;
         if (count <= MIN_ARRAY_NODE)
             return pack(edit, count, frag, children);
-        newChildren = arrayUpdate(canEdit, frag, empty, children);
+        newChildren = arrayUpdate(canEdit, frag, emptyNode, children);
     } else { // modify
         newChildren = arrayUpdate(canEdit, frag, newChild, children);
     }
@@ -506,10 +505,10 @@ const Multi__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi)
     return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert, 0));
 };
 
-empty._modify = (edit, keyEq, shift, f, h, k, size, insert) => {
+emptyNode._modify = (edit, keyEq, shift, f, h, k, size, insert) => {
     const v = f();
     if (v === nothing)
-        return empty;
+        return emptyNode;
     ++size.value;
     return Leaf(edit, h, k, v, insert, 0);
 };
@@ -653,7 +652,7 @@ Map.prototype.setTree = function(newRoot, newSize, insert) {
 
     Returns the value or `alt` if none.
 */
-const tryGetHash = hamt.tryGetHash = (alt, hash, key, map) => {
+export const tryGetHash = (alt, hash, key, map) => {
     let node = map._root;
     let shift = 0;
     const keyEq = map._config.keyEq;
@@ -717,7 +716,7 @@ Map.prototype.tryGetHash = function(alt, hash, key) {
 
     @see `tryGetHash`
 */
-const tryGet = hamt.tryGet = (alt, key, map) =>
+export const tryGet = (alt, key, map) =>
     tryGetHash(alt, map._config.hash(key), key, map);
 
 Map.prototype.tryGet = function(alt, key) {
@@ -729,7 +728,7 @@ Map.prototype.tryGet = function(alt, key) {
 
     Returns the value or `undefined` if none.
 */
-const getHash = hamt.getHash = (hash, key, map) =>
+export const getHash = (hash, key, map) =>
     tryGetHash(undefined, hash, key, map);
 
 Map.prototype.getHash = function(hash, key) {
@@ -741,7 +740,7 @@ Map.prototype.getHash = function(hash, key) {
 
     @see `get`
 */
-const get = hamt.get = (key, map) =>
+export const get = (key, map) =>
     tryGetHash(undefined, map._config.hash(key), key, map);
 
 Map.prototype.get = function(key, alt) {
@@ -778,7 +777,7 @@ Map.prototype.next = function (key, val) {
 /**
     Does an entry exist for `key` in `map`? Uses custom `hash`.
 */
-const hasHash = hamt.has = (hash, key, map) =>
+export const hasHash = (hash, key, map) =>
     tryGetHash(nothing, hash, key, map) !== nothing;
 
 Map.prototype.hasHash = function(hash, key) {
@@ -788,7 +787,7 @@ Map.prototype.hasHash = function(hash, key) {
 /**
     Does an entry exist for `key` in `map`? Uses internal hash function.
 */
-const has = hamt.has = (key, map) =>
+export const has = (key, map) =>
     hasHash(map._config.hash(key), key, map);
 
 Map.prototype.has = function(key) {
@@ -802,21 +801,21 @@ const defKeyCompare = (x, y) => x === y;
 
     @param config Configuration.
 */
-hamt.make = (config) =>
+export const make = (config) =>
     new Map(0, 0, {
         keyEq: (config && config.keyEq) || defKeyCompare,
         hash: (config && config.hash) || hash
-    }, empty, 0);
+    }, emptyNode, 0);
 
 /**
     Empty map.
 */
-hamt.empty = hamt.make();
+export const empty = make();
 
 /**
     Does `map` contain any elements?
 */
-const isEmpty = hamt.isEmpty = (map) =>
+export const isEmpty = (map) =>
     map && !!isEmptyNode(map._root);
 
 Map.prototype.isEmpty = function() {
@@ -835,7 +834,7 @@ Map.prototype.isEmpty = function() {
 
     Returns a map with the modified value. Does not alter `map`.
 */
-const modifyHash = hamt.modifyHash = (f, hash, key, insert, multi, map) => {
+export const modifyHash = (f, hash, key, insert, multi, map) => {
     const size = { value: map._size };
     const newRoot = map._root._modify(
         map._editable ? map._edit : NaN,
@@ -860,7 +859,7 @@ Map.prototype.modifyHash = function(hash, key, f) {
 
     @see `modifyHash`
 */
-const modify = hamt.modify = (f, key, map) =>
+export const modify = (f, key, map) =>
     modifyHash(f, map._config.hash(key), key, map.has(key), false, map);
 
 Map.prototype.modify = function(key, f) {
@@ -872,14 +871,14 @@ Map.prototype.modify = function(key, f) {
 
     Returns a map with the modified value. Does not alter `map`.
 */
-const setHash = hamt.setHash = (hash, key, value, map) =>
+export const setHash = (hash, key, value, map) =>
     appendHash(hash, key, value, map.has(key), map);
 
 Map.prototype.setHash = function(hash, key, value) {
     return setHash(hash, key, value, this);
 };
 
-const appendHash = hamt.appendHash = function(hash, key, value, exists, map){
+export const appendHash = function(hash, key, value, exists, map){
     var insert = map._insert;
     map = modifyHash(constant(value), hash, key, exists ? null : insert, 0, map);
     if(insert && !exists) {
@@ -906,7 +905,7 @@ Map.prototype.append = function (key, value) {
 
     @see `setHash`
 */
-const set = hamt.set = (key, value, map) =>
+export const set = (key, value, map) =>
     setHash(map._config.hash(key), key, value, map);
 
 Map.prototype.set = function(key, value) {
@@ -917,7 +916,7 @@ Map.prototype.set = function(key, value) {
  * multi-map
  * - create an extra bucket for each entry with same key
  */
-const addHash = hamt.addHash = function(hash, key, value, map){
+export const addHash = function(hash, key, value, map){
     var insert = map._insert;
     var node = getLeafOrMulti(map._root,hash,key);
     var multi = node ? node.type == MULTI ? last(node.children).id+1 : node.type == LEAF ? node.id+1 : 0 : 0;
@@ -942,7 +941,7 @@ Map.prototype.push = function (kv) {
     Returns a map with the value removed. Does not alter `map`.
 */
 const del = constant(nothing);
-const removeHash = hamt.removeHash = (hash, key, val, map) => {
+export const removeHash = (hash, key, val, map) => {
     // in case of collision, we need a leaf
     var node = getLeafOrMulti(map._root, hash, key);
     if(node === undefined) return map;
@@ -985,7 +984,7 @@ Map.prototype.removeHash = Map.prototype.deleteHash = function(hash, key) {
 
     @see `removeHash`
 */
-const remove = hamt.remove = (key, map) =>
+export const remove = (key, map) =>
     removeHash(map._config.hash(key), key, undefined, map);
 
 Map.prototype.remove = Map.prototype.delete = function(key) {
@@ -993,7 +992,7 @@ Map.prototype.remove = Map.prototype.delete = function(key) {
 };
 
 // MULTI:
-const removeValue = hamt.removeValue = (key, val, map) =>
+export const removeValue = (key, val, map) =>
     removeHash(map._config.hash(key), key, val, map);
 
 Map.prototype.removeValue = Map.prototype.deleteValue = function(key,val) {
@@ -1004,7 +1003,7 @@ Map.prototype.removeValue = Map.prototype.deleteValue = function(key,val) {
  /**
      Mark `map` as mutable.
   */
-const beginMutation = hamt.beginMutation = (map) =>
+export const beginMutation = (map) =>
     new Map(
         map._editable + 1,
         map._edit + 1,
@@ -1021,7 +1020,7 @@ Map.prototype.beginMutation = function() {
 /**
     Mark `map` as immutable.
  */
-const endMutation = hamt.endMutation = (map) => {
+export const endMutation = (map) => {
     map._editable = map._editable && map._editable - 1;
     return map;
 };
@@ -1035,7 +1034,7 @@ Map.prototype.endMutation = function() {
     @param f
     @param map HAMT
 */
-const mutate = hamt.mutate = (f, map) => {
+export const mutate = (f, map) => {
     const transient = beginMutation(map);
     f(transient);
     return endMutation(transient);
@@ -1084,7 +1083,7 @@ const visit = (map, f) => new MapIterator(map._root, map._start, f);
     Iterates over `[key, value]` arrays.
 */
 const buildPairs = (x) => [x.key, x.value];
-const entries = hamt.entries = (map) =>
+export const entries = (map) =>
     visit(map, buildPairs);
 
 Map.prototype.entries = Map.prototype[Symbol.iterator] = function() {
@@ -1097,7 +1096,7 @@ Map.prototype.entries = Map.prototype[Symbol.iterator] = function() {
     Order is not guaranteed.
 */
 const buildKeys = (x) => x.key;
-const keys = hamt.keys = (map) =>
+export const keys = (map) =>
     visit(map, buildKeys);
 
 Map.prototype.keys = function() {
@@ -1110,7 +1109,7 @@ Map.prototype.keys = function() {
     Order is not guaranteed, duplicates are preserved.
 */
 const buildValues = x => x.value;
-const values = hamt.values = Map.prototype.values = map =>
+export const values = Map.prototype.values = map =>
     visit(map, buildValues);
 
 Map.prototype.values = function() {
@@ -1128,7 +1127,7 @@ Map.prototype.values = function() {
     @param z Starting value.
     @param m HAMT
 */
-const fold = hamt.fold = (f, z, m) => {
+export const fold = (f, z, m) => {
     var root = m._root;
     if(isEmptyNode(root)) return z;
     var v = m._start;
@@ -1153,7 +1152,7 @@ Map.prototype.fold = Map.prototype.reduce = function (f, z) {
     @param f Function invoked with value and key
     @param map HAMT
 */
-const forEach = hamt.forEach = (f, map) =>
+export const forEach = (f, map) =>
     fold((_, value, key) => f(value, key, map), null, map);
 
 Map.prototype.forEach = function(f) {
@@ -1165,7 +1164,7 @@ Map.prototype.forEach = function(f) {
 /**
     Get the number of entries in `map`.
 */
-const count = hamt.count = map =>
+export const count = map =>
     map._size;
 
 Map.prototype.count = function() {
@@ -1175,13 +1174,3 @@ Map.prototype.count = function() {
 Object.defineProperty(Map.prototype, 'size', {
     get: Map.prototype.count
 });
-
-/* Export
- ******************************************************************************/
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = hamt;
-} else if (typeof define === 'function' && define.amd) {
-    define('hamt', [], () => hamt);
-} else {
-    this.hamt = hamt;
-}
