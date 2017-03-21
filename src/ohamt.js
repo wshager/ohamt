@@ -549,7 +549,7 @@ function getLeafOrMulti(node,hash,key){
             }
         }
     }
-    if(node.key === key) return node;
+    if(!!node && node.key === key) return node;
 }
 
 function getLeafFromMulti(node,id){
@@ -1046,35 +1046,35 @@ Map.prototype.mutate = function(f) {
 
 /* Traversal
  ******************************************************************************/
- const DONE = {
-     done: true
- };
+const DONE = {
+    done: true
+};
 
- function MapIterator(root,v,f) {
-     this.root = root;
-     this.f = f;
-     this.v = v;
- }
+function MapIterator(root,v,f) {
+    this.root = root;
+    this.f = f;
+    this.v = v;
+}
 
- MapIterator.prototype.next = function () {
-     var v = this.v;
-     if (!v) return DONE;
-     var node = getLeafOrMulti(this.root,v[0], v[1]);
-     if(node.type == MULTI) {
-         node = getLeafFromMulti(node,v[2]);
-         if(!node) return DONE;
-     }
-     this.v = node.next;
-     return { value: this.f(node) };
- };
+MapIterator.prototype.next = function () {
+    var v = this.v;
+    if (!v) return DONE;
+    var node = getLeafOrMulti(this.root,v[0], v[1]);
+    if(node.type == MULTI) {
+        node = getLeafFromMulti(node,v[2]);
+        if(!node) return DONE;
+    }
+    this.v = node.next;
+    return { value: this.f(node) };
+};
 
- MapIterator.prototype[Symbol.iterator] = function () {
-     return this;
- };
+MapIterator.prototype[Symbol.iterator] = function () {
+    return this;
+};
 
- /**
-     Lazily visit each value in map with function `f`.
- */
+/**
+    Lazily visit each value in map with function `f`.
+*/
 const visit = (map, f) => new MapIterator(map._root, map._start, f);
 
 /**
