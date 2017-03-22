@@ -226,12 +226,13 @@ const ArrayNode = (edit, size, children) => ({
 });
 
 
-const Multi = (edit, hash, key, children) => ({
+const Multi = (edit, hash, key, children, id) => ({
     type: MULTI,
     edit: edit,
     hash: hash,
     key: key,
     children: children,
+    id:id,
     _modify: Multi__modify
 });
 
@@ -357,7 +358,7 @@ const updateMultiList = (mutate, edit, h, list, f, k, size, insert, multi) => {
         return arraySpliceOut(mutate, idx, list);
     }
     ++size.value;
-    return arrayUpdate(mutate, len, Leaf(edit, h, k, newValue, insert, list[len - 1].id + 1), list);
+    return arrayUpdate(mutate, len, Leaf(edit, h, k, newValue, insert, multi), list);
 };
 
 const canEditNode = (edit, node) => edit === node.edit;
@@ -389,7 +390,7 @@ const Leaf__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi) 
     ++size.value;
     if(multi && leaf) {
         //if(v===leaf.value) throw new Error("Either key or value must be unique in a multimap");
-        return Multi(edit, h, k, [leaf, Leaf(edit, h, k, v, insert, multi)]);
+        return Multi(edit, h, k, [leaf, Leaf(edit, h, k, v, insert, multi)], multi);
     }
     return mergeLeaves(edit, shift, this.hash, this, h, Leaf(edit, h, k, v, insert, 0));
 };
@@ -491,11 +492,8 @@ const Multi__modify = function(edit, keyEq, shift, f, h, k, size, insert, multi)
         // modify
         const canEdit = canEditNode(edit, this);
         var list = this.children;
-        // if Multi exists, find leaf
         list = updateMultiList(canEdit, edit, h, list, f, k, size, insert, multi);
-        if (list === this.children) return this;
-
-        if(list.length > 1) return Multi(edit, h, k, list);
+        if(list.length > 1) return Multi(edit, h, k, list, Math.max(this.id,multi));
         // collapse single element collision list
         return list[0];
     }
@@ -609,7 +607,7 @@ function updatePosition(parent,edit,entry,val,prev = false,s = 0){
         } else if(type == 4){
             return ArrayNode(edit, parent.size, children);
         } else if(type == 5){
-            return Multi(edit, hash, key, children);
+            return Multi(edit, hash, key, children, parent.id);
         }
     }
     return parent;
@@ -919,7 +917,7 @@ Map.prototype.set = function(key, value) {
 export const addHash = function(hash, key, value, map){
     var insert = map._insert;
     var node = getLeafOrMulti(map._root,hash,key);
-    var multi = node ? node.type == MULTI ? last(node.children).id+1 : node.type == LEAF ? node.id+1 : 0 : 0;
+    var multi = node ? node.id+1 : 0;
     var newmap = modifyHash(constant(value), hash, key, insert, multi, map);
     if(insert) {
         const edit = map._editable ? map._edit : NaN;
@@ -998,6 +996,35 @@ export const removeValue = (key, val, map) =>
 Map.prototype.removeValue = Map.prototype.deleteValue = function(key,val) {
     return removeValue(key, val, this);
 };
+
+export const insertBefore = (ref, ins, map) => {
+    var rkey = ref[0], rval = ref[1], rh = hash(rkey);
+    var refNode = getLeafOrMulti(map._root, rh, rkey);
+    if(isEmptyNode(refNode)) return map.push(insert);
+    var key = ins[0], val = ins[1], h = hash(key);
+    var node = getLeafOrMulti(map._root, h, key);
+    var multi = node ? node.id + 1 : 0;
+    if(refNode.type == MULTI){
+        refNode = getLeafFromMultiV(refNode,rval);
+    }
+    var prev = refNode.prev, next = refNode.next;
+    var insert = map._insert;
+    map = modifyHash(constant(val), h, key, prev, multi, map);
+    const edit = map._editable ? map._edit : NaN;
+    // set the refNode's prev to ins' id
+    map._root = updatePosition(map._root,edit,[rh,rkey,refNode.id],[h,key,multi],true);
+    // set the refNode's prev's next to ins' id
+    map._root = updatePosition(map._root,edit,prev,[h,key,multi]);
+    // set the inserted's next to refNode
+    map._root = updatePosition(map._root,edit,[h,key,multi],[rh,rkey,refNode.id]);
+    map._insert = insert;
+    return map;
+};
+
+Map.prototype.insertBefore = function(ref,ins) {
+    return insertBefore(ref, ins, this);
+};
+
 /* Mutation
  ******************************************************************************/
  /**
