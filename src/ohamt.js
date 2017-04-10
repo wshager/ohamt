@@ -747,13 +747,15 @@ Map.prototype.get = function(key, alt) {
 
 Map.prototype.first = function(){
     var start = this._start;
+    if(!start) return;
     var node = getLeafOrMulti(this._root, start[0], start[1]);
     if(node.type == MULTI) node = getLeafFromMulti(node,start[2]);
     return node.value;
 };
 
 Map.prototype.last = function(){
-    var end = this._init;
+    var end = this._insert;
+    if(!end) return;
     var node = getLeafOrMulti(this._root, end[0], end[1]);
     if(node.type == MULTI) node = getLeafFromMulti(node,end[2]);
     return node.value;
@@ -1000,21 +1002,25 @@ Map.prototype.removeValue = Map.prototype.deleteValue = function(key,val) {
 export const insertBefore = (ref, ins, map) => {
     var rkey = ref[0], rval = ref[1], rh = hash(rkey);
     var refNode = getLeafOrMulti(map._root, rh, rkey);
-    if(isEmptyNode(refNode)) return map.push(insert);
+    if(refNode === undefined) return map.push(insert);
     var key = ins[0], val = ins[1], h = hash(key);
     var node = getLeafOrMulti(map._root, h, key);
     var multi = node ? node.id + 1 : 0;
     if(refNode.type == MULTI){
         refNode = getLeafFromMultiV(refNode,rval);
     }
-    var prev = refNode.prev, next = refNode.next;
+    var prev = refNode.prev;
     var insert = map._insert;
     map = modifyHash(constant(val), h, key, prev, multi, map);
     const edit = map._editable ? map._edit : NaN;
     // set the refNode's prev to ins' id
     map._root = updatePosition(map._root,edit,[rh,rkey,refNode.id],[h,key,multi],true);
     // set the refNode's prev's next to ins' id
-    map._root = updatePosition(map._root,edit,prev,[h,key,multi]);
+    if(prev) {
+        map._root = updatePosition(map._root,edit,prev,[h,key,multi]);
+    } else {
+        map._start = [h,key,multi];
+    }
     // set the inserted's next to refNode
     map._root = updatePosition(map._root,edit,[h,key,multi],[rh,rkey,refNode.id]);
     map._insert = insert;
@@ -1023,6 +1029,14 @@ export const insertBefore = (ref, ins, map) => {
 
 Map.prototype.insertBefore = function(ref,ins) {
     return insertBefore(ref, ins, this);
+};
+
+Map.prototype.propsByValue = function(key,val){
+    var node = getLeafOrMulti(this._root,hash(key),key);
+    if(node.type == MULTI){
+        node = getLeafFromMultiV(val);
+    }
+    return [node.hash, node.key, node.id];
 };
 
 /* Mutation
