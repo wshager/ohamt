@@ -1,6 +1,6 @@
 {
   "name": "ohamt",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Ordered Hash array mapped trie",
   "main": "./lib/ohamt.js",
   "scripts": {
@@ -12,7 +12,6 @@
   "devDependencies": {
     "babel-cli": "^6.18.0",
     "babel-plugin-transform-es2015-modules-commonjs": "^6.18.0",
-    "browserify": "^14.1.0",
-    "uglify": "^0.1.5"
+    "browserify": "^14.1.0"
   }
 }

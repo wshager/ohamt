@@ -4,6 +4,7 @@
 Object.defineProperty(exports, "__esModule", {
     value: true
 });
+exports.MapIterator = MapIterator;
 /**
     @fileOverview Hash Array Mapped Trie.
 
@@ -728,15 +729,15 @@ Map.prototype.get = function (key, alt) {
 
 Map.prototype.first = function () {
     var start = this._start;
-    if(!start) return;
+    if (!start) return;
     var node = getLeafOrMulti(this._root, start[0], start[1]);
     if (node.type == MULTI) node = getLeafFromMulti(node, start[2]);
     return node.value;
 };
 
 Map.prototype.last = function () {
-    var end = this._init;
-    if(!end) return;
+    var end = this._insert;
+    if (!end) return;
     var node = getLeafOrMulti(this._root, end[0], end[1]);
     if (node.type == MULTI) node = getLeafFromMulti(node, end[2]);
     return node.value;
@@ -996,6 +997,14 @@ const insertBefore = exports.insertBefore = (ref, ins, map) => {
 
 Map.prototype.insertBefore = function (ref, ins) {
     return insertBefore(ref, ins, this);
+};
+
+Map.prototype.propsByValue = function (key, val) {
+    var node = getLeafOrMulti(this._root, hash(key), key);
+    if (node.type == MULTI) {
+        node = getLeafFromMultiV(val);
+    }
+    return [node.hash, node.key, node.id];
 };
 
 /* Mutation
