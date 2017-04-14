@@ -28,12 +28,9 @@ const constant = x => () => x;
     Based on:
     http://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript-jquery
 */
-export const hash = str => {
-    const type = typeof str;
-    if (type === 'number')
-        return str;
-    if (type !== 'string')
-        str += '';
+export const hash = key => {
+    if (typeof key === 'number') return key;
+    var str = key+'';
 
     let hash = 0;
     for (let i = 0, len = str.length; i < len; ++i) {
@@ -1091,7 +1088,7 @@ const DONE = {
     done: true
 };
 
-function MapIterator(root,v,f) {
+export function MapIterator(root,v,f) {
     this.root = root;
     this.f = f;
     this.v = v;
