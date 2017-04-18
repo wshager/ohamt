@@ -1,4 +1,4 @@
-var hamt = require("../src/ohamt");
+var hamt = require("../lib/ohamt");
 var util = require("util");
 var x = hamt.empty.beginMutation(), ar = [];
 
