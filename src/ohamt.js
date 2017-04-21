@@ -396,11 +396,10 @@ const Collision__modify = function(edit, keyEq, shift, f, h, k, size, insert, mu
     if (h === this.hash) {
         const canEdit = canEditNode(edit, this);
         const list = updateCollisionList(canEdit, edit, keyEq, this.hash, this.children, f, k, size, insert);
-        if (list === this.children)
-            return this;
-
-        return list.length > 1 ? Collision(edit, this.hash, list) :
-            list[0]; // collapse single element collision list
+        var len = list.length;
+        return len > 1 ? canEdit ? this : listCollision(edit, this.hash, list) : len == 1 ?
+            list[0] :  // collapse single element collision list
+            emptyNode; // nothing to return
     }
     const v = f();
     if (v === nothing)
@@ -456,7 +455,7 @@ const ArrayNode__modify = function(edit, keyEq, shift, f, h, k, size, insert, mu
     const children = this.children;
     const frag = hashFragment(shift, h);
     const child = children[frag];
-    const newChild = (child || emptyNode)._modify(edit, keyEq, shift + SIZE, f, h, k, size);
+    const newChild = (child || emptyNode)._modify(edit, keyEq, shift + SIZE, f, h, k, size, insert, multi);
 
     if (child === newChild)
         return this;
@@ -516,13 +515,13 @@ function getLeafOrMulti(node,keyEq,hash,key){
     while(node && node.type > 1) {
         if(node.type == 2){
             len = node.children.length;
-            for(var i=0;i<len;i++) {
+            for (var i = 0; i < len; i++) {
                 var c = node.children[i];
-                if(keyEq(c.key, key)) {
-                    node = c;
-                    break;
+                if (keyEq(c.key, key)) {
+                    return c;
                 }
             }
+            return emptyNode;
         } else if(node.type == 3) {
             var frag = hashFragment(s, hash);
             var bit = toBitmap(frag);
@@ -561,6 +560,18 @@ function getLeafFromMultiV(node,val){
     }
 }
 
+
+/**
+ * Set prev/next of leaf deeply (through recursion)
+ * @param  {Node}  parent           the branch to update
+ * @param  {function}  keyEq        key equality test
+ * @param  {function}  edit         mutable flag
+ * @param  {Array}  entry           entry tuple to modify
+ * @param  {Array}  val             value tuple to set
+ * @param  {Boolean} [prev=false]   if true set prev, otherwise set next
+ * @param  {Number}  [s=0]          the current height of the branch
+ * @return {Node}                 the updated branch
+ */
 function updatePosition(parent,keyEq,edit,entry,val,prev = false,s = 0){
     var len = 0, type = parent.type, node = null, idx = 0, hash = entry[0], key = entry[1], id = entry[2];
     if(type == 1) {
@@ -747,7 +758,7 @@ Map.prototype.first = function(){
     if(!start) return;
     var node = getLeafOrMulti(this._root, this._config.keyEq, start[0], start[1]);
     if(node.type == MULTI) node = getLeafFromMulti(node,start[2]);
-    return node.value;
+    return node && node.value;
 };
 
 Map.prototype.last = function(){
@@ -755,7 +766,7 @@ Map.prototype.last = function(){
     if(!end) return;
     var node = getLeafOrMulti(this._root, this._config.keyEq, end[0], end[1]);
     if(node.type == MULTI) node = getLeafFromMulti(node,end[2]);
-    return node.value;
+    return node && node.value;
 };
 
 Map.prototype.next = function (key, val) {
@@ -768,7 +779,7 @@ Map.prototype.next = function (key, val) {
     if(next.type == MULTI) {
         next = getLeafFromMulti(next,node.next[2]);
     }
-    return next.value;
+    return next && next.value;
 };
 
 /**
@@ -1037,7 +1048,7 @@ Map.prototype.propsByValue = function(key,val){
     if(node.type == MULTI){
         node = getLeafFromMultiV(val);
     }
-    return [node.hash, node.key, node.id];
+    return node && [node.hash, node.key, node.id];
 };
 
 /* Mutation
@@ -1103,6 +1114,7 @@ MapIterator.prototype.next = function () {
     var v = this.v;
     if (!v) return DONE;
     var node = getLeafOrMulti(this.root, this.config.keyEq,v[0], v[1]);
+    if (!node) return DONE;
     if(node.type == MULTI) {
         node = getLeafFromMulti(node,v[2]);
         if(!node) return DONE;
