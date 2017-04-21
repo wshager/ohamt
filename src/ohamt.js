@@ -1218,3 +1218,14 @@ Map.prototype.count = function() {
 Object.defineProperty(Map.prototype, 'size', {
     get: Map.prototype.count
 });
+
+/* toMap
+ ******************************************************************************/
+/**
+    Convert to JS object
+*/
+export const toMap = map => map.fold((acc,v,k) => (acc[k] = v && v.toJS ? v.toJS() : v,acc),{});
+
+Map.prototype.toJS = function () {
+    return toMap(this);
+};
