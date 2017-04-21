@@ -1,6 +1,6 @@
 var hamt = require("../lib/ohamt");
 var util = require("util");
-var x = hamt.empty.beginMutation(), ar = [];
+var x = hamt.empty, ar = [];
 
 for(var n=0;n<2600;n++){
 	//var k = String.fromCharCode(n+97);
@@ -21,7 +21,7 @@ for(n = 0; n < ar.length; n++){
 }
 
 // force collision
-/*
+
 if(!x.has('uuhrvonp')) {
 	ar.push('uuhrvonp');
 	x = x.set('uuhrvonp',n++);
@@ -34,7 +34,6 @@ ar.push("abcdefgh");
 x = x.set("abcdefgh",n++);
 x = x.remove("uuhrvonp");
 ar.splice(ar.indexOf("uuhrvonp"),1);
-*/
 
 
 var i = 0;
